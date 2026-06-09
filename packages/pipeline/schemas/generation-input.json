@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "build-block/generation-input",
+  "title": "GenerationInput",
+  "type": "object",
+  "required": ["business_idea", "industry", "target_market"],
+  "properties": {
+    "business_idea": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 2000
+    },
+    "industry": {
+      "type": "string"
+    },
+    "target_market": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["idea", "pre_launch", "early_revenue", "scaling"]
+    },
+    "revenue_model": {
+      "type": "string"
+    },
+    "geography": {
+      "type": "string"
+    },
+    "is_preview": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

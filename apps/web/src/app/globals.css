@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0f;
+  --foreground: #e4e4ef;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  min-height: 100vh;
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-surface-raised/80 backdrop-blur-md border border-surface-border;
+  }
+}

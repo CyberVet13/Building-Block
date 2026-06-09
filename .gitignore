@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+.next/
+out/
+cdk.out/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Env and secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs and test artifacts
+*.log
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+
+# AWS / CDK
+.aws-sam/
+cdk.out/

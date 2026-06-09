@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "build-block/outline-output",
+  "title": "OutlineStageOutput",
+  "type": "object",
+  "required": ["sections", "assumptions", "industry_tags"],
+  "properties": {
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "key_points"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "key_points": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "industry_tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
