@@ -8,6 +8,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as sfn from "aws-cdk-lib/aws-stepfunctions";
+import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 import { buildPipelineAsl } from "./pipeline-asl";
 
@@ -316,6 +317,98 @@ export class BuildBlockStack extends cdk.Stack {
       methods: [apigatewayv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration("AdminCorpusActionInt", adminCorpus),
     });
+
+    // ── Export Lambda ─────────────────────────────────────────────────────
+    const exportHandler = new lambda.Function(this, "ExportHandler", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "build_block.handlers.export.handler",
+      code: pythonCode,
+      timeout: cdk.Duration.seconds(60),
+      memorySize: 1024,   // ReportLab + python-docx need headroom
+      environment: sharedEnv,
+    });
+    plansBucket.grantReadWrite(exportHandler);
+
+    httpApi.addRoutes({
+      path: "/plans/{planId}/export",
+      methods: [apigatewayv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("ExportIntegration", exportHandler),
+    });
+
+    // ── WAF (REGIONAL) ────────────────────────────────────────────────────
+    // Protects the HTTP API with:
+    //   1. AWS Managed Common Rule Set  (SQLi, XSS, known bad inputs)
+    //   2. AWS Managed Known Bad Inputs (log4j, Spring4Shell, etc.)
+    //   3. IP-based rate limit: 200 req / 5 min per IP
+    const webAcl = new wafv2.CfnWebACL(this, "ApiWaf", {
+      name: `build-block-${stage}`,
+      scope: "REGIONAL",
+      defaultAction: { allow: {} },
+      visibilityConfig: {
+        cloudWatchMetricsEnabled: true,
+        metricName: `build-block-waf-${stage}`,
+        sampledRequestsEnabled: true,
+      },
+      rules: [
+        {
+          name: "CommonRuleSet",
+          priority: 1,
+          overrideAction: { none: {} },
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesCommonRuleSet",
+            },
+          },
+          visibilityConfig: {
+            cloudWatchMetricsEnabled: true,
+            metricName: "CommonRuleSet",
+            sampledRequestsEnabled: false,
+          },
+        },
+        {
+          name: "KnownBadInputs",
+          priority: 2,
+          overrideAction: { none: {} },
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesKnownBadInputsRuleSet",
+            },
+          },
+          visibilityConfig: {
+            cloudWatchMetricsEnabled: true,
+            metricName: "KnownBadInputs",
+            sampledRequestsEnabled: false,
+          },
+        },
+        {
+          name: "IpRateLimit",
+          priority: 3,
+          action: { block: {} },
+          statement: {
+            rateBasedStatement: {
+              limit: 200,
+              aggregateKeyType: "IP",
+            },
+          },
+          visibilityConfig: {
+            cloudWatchMetricsEnabled: true,
+            metricName: "IpRateLimit",
+            sampledRequestsEnabled: true,
+          },
+        },
+      ],
+    });
+
+    // Associate WAF with the HTTP API stage
+    const defaultStage = httpApi.defaultStage?.node.defaultChild as cdk.CfnResource | undefined;
+    if (defaultStage) {
+      new wafv2.CfnWebACLAssociation(this, "WafAssociation", {
+        resourceArn: `arn:aws:apigateway:${this.region}::/apis/${httpApi.apiId}/stages/$default`,
+        webAclArn: webAcl.attrArn,
+      });
+    }
 
     // ── Outputs ───────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, "CorpusBucketName", { value: corpusBucket.bucketName });

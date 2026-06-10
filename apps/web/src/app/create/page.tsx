@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { startGeneration, waitForJob, APIError, type JobResponse } from "@/lib/api";
+import { startGeneration, waitForJob, exportPlan, APIError, type JobResponse } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 
 const STEPS = [
@@ -34,6 +34,8 @@ export default function CreatePage() {
     revenue_model: "",
   });
   const [gen, setGen] = useState<GenState>({ phase: "idle" });
+  const [exporting, setExporting] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const isLast = step === STEPS.length - 1;
 
@@ -76,10 +78,34 @@ export default function CreatePage() {
     }
   }
 
+  async function download(planId: string, format: "pdf" | "docx") {
+    const token = getToken();
+    if (!token) return;
+    setExporting(format);
+    setExportError(null);
+    try {
+      const { download_url, filename } = await exportPlan(planId, format, token);
+      const a = document.createElement("a");
+      a.href = download_url;
+      a.download = filename;
+      a.click();
+    } catch (err) {
+      if (err instanceof APIError && err.status === 402) {
+        setExportError("Upgrade your plan to export.");
+      } else {
+        setExportError(String(err));
+      }
+    } finally {
+      setExporting(null);
+    }
+  }
+
   // ── Result view ─────────────────────────────────────────────────────────
   if (gen.phase === "done") {
     const plan = gen.job.plan;
     const sections = plan?.content?.sections ?? {};
+    const planId = plan?.plan_id ?? "";
+
     return (
       <main className="min-h-screen bg-surface px-6 py-12">
         <div className="mx-auto max-w-3xl">
@@ -92,6 +118,35 @@ export default function CreatePage() {
             )}
           </div>
 
+          {/* Export bar */}
+          {!plan?.is_preview && planId && (
+            <div className="glass mb-6 flex items-center gap-3 rounded-xl px-5 py-3">
+              <span className="text-sm text-gray-400">Export:</span>
+              <button
+                type="button"
+                disabled={exporting === "pdf"}
+                onClick={() => download(planId, "pdf")}
+                className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-glow disabled:opacity-50"
+              >
+                {exporting === "pdf" ? "Generating…" : "PDF"}
+              </button>
+              <button
+                type="button"
+                disabled={exporting === "docx"}
+                onClick={() => download(planId, "docx")}
+                className="glass rounded-lg px-4 py-1.5 text-sm font-medium hover:border-accent/50 disabled:opacity-50"
+              >
+                {exporting === "docx" ? "Generating…" : "DOCX"}
+              </button>
+              {exportError && (
+                <span className="text-xs text-red-400">
+                  {exportError}{" "}
+                  <Link href="/pricing" className="underline">Upgrade</Link>
+                </span>
+              )}
+            </div>
+          )}
+
           {Object.entries(sections).map(([key, text]) => (
             <div key={key} className="glass mb-6 rounded-xl p-6">
               <h2 className="mb-3 text-lg font-semibold capitalize">{key.replace(/_/g, " ")}</h2>
@@ -103,7 +158,7 @@ export default function CreatePage() {
             <div className="glass rounded-xl border-accent/40 p-6 text-center">
               <p className="mb-4 text-gray-300">
                 This is a preview of your executive summary. Subscribe to generate the full plan
-                with all sections, financial projections, and export to PDF.
+                with all sections, financial projections, and PDF export.
               </p>
               <Link
                 href="/pricing"
