@@ -129,6 +129,27 @@ export async function getPortalUrl(token: string): Promise<{ portal_url: string 
   return res.json();
 }
 
+export interface PlanDetail {
+  plan_id: string;
+  title: string;
+  content: { sections: Record<string, string> };
+  is_preview: boolean;
+  version: number;
+  created_at: string;
+  industry: string;
+}
+
+export async function getPlan(planId: string, token: string): Promise<PlanDetail> {
+  const res = await fetch(`${API_URL}/plans/${planId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new APIError(res.status, err.error ?? "Plan not found");
+  }
+  return res.json();
+}
+
 export async function exportPlan(
   planId: string,
   format: "pdf" | "docx",

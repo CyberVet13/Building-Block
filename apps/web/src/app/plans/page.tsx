@@ -102,7 +102,9 @@ export default function PlansPage() {
               <div key={plan.plan_id} className="glass flex items-center justify-between rounded-xl px-6 py-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <h2 className="truncate font-medium">{plan.title}</h2>
+                    <Link href={`/plans/${plan.plan_id}`} className="truncate font-medium hover:text-accent-glow transition-colors">
+                      {plan.title}
+                    </Link>
                     {plan.is_preview && (
                       <span className="shrink-0 rounded-full bg-accent/20 px-2 py-0.5 text-xs text-accent-glow">
                         preview

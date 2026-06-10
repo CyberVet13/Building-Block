@@ -305,6 +305,12 @@ export class BuildBlockStack extends cdk.Stack {
     });
 
     httpApi.addRoutes({
+      path: "/plans/{planId}",
+      methods: [apigatewayv2.HttpMethod.GET],
+      integration: new HttpLambdaIntegration("PlanDetailIntegration", plansHandler),
+    });
+
+    httpApi.addRoutes({
       path: "/checkout",
       methods: [apigatewayv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration("CheckoutIntegration", checkoutHandler),
