@@ -13,7 +13,7 @@ from build_block.config import settings
 @lru_cache(maxsize=1)
 def _pool() -> psycopg_pool.ConnectionPool:
     pool = psycopg_pool.ConnectionPool(
-        settings.database_url,
+        settings.resolved_database_url(),
         min_size=1,
         max_size=5,
         open=False,

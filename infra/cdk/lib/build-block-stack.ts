@@ -8,6 +8,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as sfn from "aws-cdk-lib/aws-stepfunctions";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 import { buildPipelineAsl } from "./pipeline-asl";
@@ -85,6 +86,31 @@ export class BuildBlockStack extends cdk.Stack {
       authFlows: { userPassword: true, userSrp: true },
     });
 
+    // ── Secrets Manager ───────────────────────────────────────────────────
+    // Store sensitive values in Secrets Manager; Lambdas read via SDK at cold start.
+    // Populate these secrets after first deploy:
+    //   aws secretsmanager put-secret-value --secret-id build-block/db-password-{stage} --secret-string "yourpassword"
+    //   aws secretsmanager put-secret-value --secret-id build-block/stripe-{stage} --secret-string '{"secret_key":"sk_live_...","webhook_secret":"whsec_..."}'
+
+    const dbSecret = new secretsmanager.Secret(this, "DbSecret", {
+      secretName: `build-block/db-password-${stage}`,
+      description: "Aurora DB password for build-block app user",
+      generateSecretString: {
+        secretStringTemplate: JSON.stringify({ username: "buildblock_app" }),
+        generateStringKey: "password",
+        excludePunctuation: true,
+        passwordLength: 32,
+      },
+    });
+
+    const stripeSecret = new secretsmanager.Secret(this, "StripeSecret", {
+      secretName: `build-block/stripe-${stage}`,
+      description: "Stripe secret key and webhook secret",
+      secretStringValue: cdk.SecretValue.unsafePlainText(
+        JSON.stringify({ secret_key: "", webhook_secret: "" })
+      ),
+    });
+
     // ── Shared Lambda config ──────────────────────────────────────────────
     const sharedEnv: Record<string, string> = {
       AWS_REGION_NAME: this.region,
@@ -92,10 +118,11 @@ export class BuildBlockStack extends cdk.Stack {
       PLANS_BUCKET: plansBucket.bucketName,
       COGNITO_USER_POOL_ID: userPool.userPoolId,
       COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,
-      DATABASE_URL: `postgresql://buildblock_app:REPLACE_ME@${cluster.clusterEndpoint.hostname}:5432/buildblock`,
-      // Stripe keys injected at deploy time via environment or Secrets Manager
-      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? "",
-      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+      // DB URL uses secret reference; password resolved at runtime via config.py
+      DB_HOST: cluster.clusterEndpoint.hostname,
+      DB_NAME: "buildblock",
+      DB_SECRET_ARN: dbSecret.secretArn,
+      STRIPE_SECRET_ARN: stripeSecret.secretArn,
       WEB_URL: process.env.WEB_URL ?? "https://your-domain.com",
     };
 
@@ -167,6 +194,15 @@ export class BuildBlockStack extends cdk.Stack {
     stateMachine.grantStartExecution(apiHandler);
     workerHandler.grantInvoke(stateMachine);
     finalizeHandler.grantInvoke(stateMachine);
+
+    // Grant all Lambdas read access to secrets
+    const allLambdas = [
+      apiHandler, workerHandler, finalizeHandler,
+    ];
+    for (const fn of allLambdas) {
+      dbSecret.grantRead(fn);
+      stripeSecret.grantRead(fn);
+    }
 
     // Pass state machine ARN to API handler
     apiHandler.addEnvironment("STATE_MACHINE_ARN", stateMachine.stateMachineArn);

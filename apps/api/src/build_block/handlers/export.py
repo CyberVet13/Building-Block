@@ -44,8 +44,8 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         sub = get_subscription(user.id)
 
         # ── Tier gate ─────────────────────────────────────────────────────
-        if sub.tier not in EXPORT_ALLOWED_TIERS and sub.status != "active":
-            return _err(402, "Export requires a paid subscription. Upgrade at /pricing.")
+        if sub.tier not in EXPORT_ALLOWED_TIERS or sub.status not in ("active", "trialing"):
+            return _err(402, "Export requires an active paid subscription. Upgrade at /pricing.")
 
         body = json.loads(event.get("body") or "{}")
         fmt = body.get("format", "pdf").lower()
