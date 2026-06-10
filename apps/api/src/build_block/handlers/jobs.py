@@ -11,11 +11,17 @@ from typing import Any
 from uuid import UUID
 
 from build_block.auth.cognito import extract_bearer, verify_token
+from build_block.config import settings
 from build_block.db import get_or_create_user, get_job
 from build_block.db.pool import get_conn
+from build_block.demo import DEMO_JOB, DEMO_JOB_ID
 
 
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
+    # Demo mode
+    if settings.demo_mode:
+        return _response(200, DEMO_JOB)
+
     try:
         headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
         token = extract_bearer(headers.get("authorization"))

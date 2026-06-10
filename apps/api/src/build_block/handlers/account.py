@@ -10,6 +10,7 @@ from typing import Any
 
 from build_block.auth.cognito import extract_bearer, verify_token
 from build_block.billing.stripe_client import TIER_PLAN_LIMITS
+from build_block.config import settings
 from build_block.db import (
     count_plans_used_in_period,
     get_or_create_user,
@@ -18,6 +19,13 @@ from build_block.db import (
 
 
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
+    if settings.demo_mode:
+        return _response(200, {
+            "tier": "pro", "status": "active",
+            "plans_used": 1, "plans_limit": 10, "plans_remaining": 9,
+            "current_period_end": "2026-07-10T00:00:00Z",
+        })
+
     try:
         headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
         token = extract_bearer(headers.get("authorization"))

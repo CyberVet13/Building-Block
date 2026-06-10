@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     db_host: str = ""
     db_name: str = "buildblock"
 
+    # Demo mode: return fixture data, skip DB and Bedrock entirely
+    demo_mode: bool = False
+
     # Tier limits (override in .env if needed)
     tier_limit_free: int = 0
     tier_limit_starter: int = 3

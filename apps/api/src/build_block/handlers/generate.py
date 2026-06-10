@@ -21,6 +21,8 @@ import boto3
 
 from build_block.auth.cognito import extract_bearer, verify_token
 from build_block.billing.usage import check_generation_allowed
+from build_block.config import settings
+from build_block.demo import DEMO_JOB_ID
 from build_block.db import (
     count_plans_used_in_period,
     get_or_create_user,
@@ -36,6 +38,18 @@ def _sfn_client():
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    # --- Demo mode: skip all infrastructure ---
+    if settings.demo_mode:
+        body = json.loads(event.get("body") or "{}")
+        is_preview = body.get("is_preview", False)
+        return _response(202, {
+            "job_id": DEMO_JOB_ID,
+            "is_preview": is_preview,
+            "stream_url": f"/jobs/{DEMO_JOB_ID}",
+            "usage": {"allowed": True, "tier": "pro", "plans_used": 1,
+                      "plans_limit": 10, "is_preview": is_preview},
+        })
+
     try:
         # --- Auth ---
         headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}

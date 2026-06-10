@@ -10,11 +10,30 @@ import json
 from typing import Any
 
 from build_block.auth.cognito import extract_bearer, verify_token
+from build_block.config import settings
 from build_block.db import get_or_create_user
 from build_block.db.pool import get_conn
+from build_block.demo import DEMO_PLAN, DEMO_PLAN_ID
 
 
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
+    # Demo mode
+    if settings.demo_mode:
+        path_params = event.get("pathParameters") or {}
+        if path_params.get("planId"):
+            return _ok(DEMO_PLAN)
+        return _ok({
+            "plans": [{
+                "plan_id": DEMO_PLAN_ID,
+                "title": DEMO_PLAN["title"],
+                "is_preview": False,
+                "industry": DEMO_PLAN["industry"],
+                "created_at": DEMO_PLAN["created_at"],
+                "status": "completed",
+            }],
+            "total": 1, "limit": 20, "offset": 0,
+        })
+
     try:
         headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
         token = extract_bearer(headers.get("authorization"))
