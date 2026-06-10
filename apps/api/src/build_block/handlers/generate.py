@@ -27,6 +27,7 @@ from build_block.db import (
     get_subscription,
     reserve_job,
 )
+from build_block.db.concurrency import check_concurrency_allowed
 from build_block.models import GenerationInput
 
 
@@ -63,6 +64,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "error": usage.message,
                 "usage": usage.model_dump(),
             })
+
+        # --- Concurrency check ---
+        concurrent_ok, concurrent_msg = check_concurrency_allowed(user.id, sub.tier)
+        if not concurrent_ok:
+            return _response(429, {"error": concurrent_msg})
 
         # --- Reserve job ---
         job = reserve_job(
