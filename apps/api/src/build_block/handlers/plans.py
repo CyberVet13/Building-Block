@@ -1,11 +1,7 @@
 """Lambda handler: GET /plans  |  GET /plans/{planId}
 
-GET /plans         — paginated list with metadata
+GET /plans          — paginated list with metadata
 GET /plans/{planId} — full plan content for the plan viewer
-"""
-
-Returns a paginated list with metadata (no full content) for the plans
-history page. Full content is served via GET /jobs/{jobId} after generation.
 """
 
 from __future__ import annotations
