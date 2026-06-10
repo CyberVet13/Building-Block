@@ -3,7 +3,7 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signIn } from "@/lib/auth";
+import { signIn, getCurrentUser, setRoleCookie } from "@/lib/auth";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -18,7 +18,16 @@ export default function SignInPage() {
     setError(null);
     try {
       await signIn(email, password);
-      router.push("/create");
+      // Fetch user to set role cookie for middleware admin guard
+      const user = await getCurrentUser();
+      if (user) {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/account`, {
+          headers: { Authorization: `Bearer ${(await import("@/lib/auth")).getToken() ?? ""}` },
+        }).then((r) => r.json()).catch(() => ({}));
+        if (res.role === "admin") setRoleCookie("admin");
+      }
+      const next = new URLSearchParams(window.location.search).get("next") ?? "/create";
+      router.push(next);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
     } finally {

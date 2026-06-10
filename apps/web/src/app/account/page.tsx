@@ -35,8 +35,7 @@ export default function AccountPage() {
   return (
     <main className="min-h-screen bg-surface px-6 py-12">
       <div className="mx-auto max-w-xl">
-        <Link href="/" className="text-sm text-gray-400 hover:text-white">← Back</Link>
-        <h1 className="mt-6 text-3xl font-bold">Account</h1>
+        <h1 className="text-3xl font-bold">Account</h1>
 
         {error && (
           <p className="mt-4 rounded-lg bg-red-900/30 px-4 py-3 text-sm text-red-300">{error}</p>

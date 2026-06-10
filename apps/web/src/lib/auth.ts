@@ -52,12 +52,22 @@ function _cacheToken(token: string, expEpoch: number) {
   if (typeof window === "undefined") return;
   window.sessionStorage.setItem(TOKEN_KEY, token);
   window.sessionStorage.setItem(TOKEN_EXP_KEY, String(expEpoch));
+  // Lightweight auth cookie for Next.js middleware route guard
+  document.cookie = "bb_authed=1; path=/; SameSite=Lax";
 }
 
 function _clearToken() {
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(TOKEN_KEY);
   window.sessionStorage.removeItem(TOKEN_EXP_KEY);
+  // Clear auth cookie
+  document.cookie = "bb_authed=; path=/; max-age=0";
+  document.cookie = "bb_role=; path=/; max-age=0";
+}
+
+export function setRoleCookie(role: string) {
+  if (typeof window === "undefined") return;
+  document.cookie = `bb_role=${role}; path=/; SameSite=Lax`;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

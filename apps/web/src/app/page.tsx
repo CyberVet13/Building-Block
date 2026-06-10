@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const tiers = [
+const tiers: { name: string; price: string; plans: string; highlight: boolean }[] = [
   { name: "Free", price: "$0", plans: "Preview only", highlight: false },
   { name: "Starter", price: "$24/mo", plans: "3 plans / month", highlight: false },
   { name: "Pro", price: "$59/mo", plans: "10 plans / month", highlight: true },
@@ -13,17 +13,6 @@ export default function HomePage() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-accent/20 via-surface to-surface" />
 
       <div className="relative mx-auto max-w-6xl px-6 py-16">
-        <nav className="mb-20 flex items-center justify-between">
-          <span className="text-xl font-semibold tracking-tight">Build-Block</span>
-          <div className="flex gap-4 text-sm text-gray-400">
-            <Link href="/create" className="hover:text-white transition-colors">Create</Link>
-            <Link href="/plans" className="hover:text-white transition-colors">My Plans</Link>
-            <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
-            <Link href="/account" className="hover:text-white transition-colors">Account</Link>
-            <Link href="/admin" className="hover:text-white transition-colors">Admin</Link>
-          </div>
-        </nav>
-
         <section className="mb-24 text-center">
           <p className="mb-4 text-sm uppercase tracking-widest text-accent-glow">
             AI + Proprietary Templates

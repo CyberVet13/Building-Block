@@ -26,7 +26,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           ))}
         </nav>
         <div className="mt-auto pt-8">
-          <Link href="/" className="text-xs text-gray-600 hover:text-gray-400">← App</Link>
+          <Link href="/create" className="text-xs text-gray-600 hover:text-gray-400">← App</Link>
         </div>
       </aside>
 

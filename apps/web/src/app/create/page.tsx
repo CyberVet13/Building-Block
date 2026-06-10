@@ -223,8 +223,7 @@ export default function CreatePage() {
   return (
     <main className="min-h-screen bg-surface">
       <div className="mx-auto max-w-3xl px-6 py-12">
-        <Link href="/" className="text-sm text-gray-400 hover:text-white">← Back</Link>
-        <h1 className="mt-6 text-3xl font-bold">Create your business plan</h1>
+        <h1 className="text-3xl font-bold">Create your business plan</h1>
         <p className="mt-2 text-sm text-gray-400">
           Free: preview one section. Subscribe for the full plan.
         </p>

@@ -93,8 +93,7 @@ export default function PricingPage() {
   return (
     <main className="min-h-screen bg-surface px-6 py-16">
       <div className="mx-auto max-w-5xl">
-        <Link href="/" className="text-sm text-gray-400 hover:text-white">← Back</Link>
-        <h1 className="mt-6 text-4xl font-bold">Simple subscription pricing</h1>
+        <h1 className="text-4xl font-bold">Simple subscription pricing</h1>
         <p className="mt-2 text-gray-400">
           One full plan = one generation. Resets each billing period.
         </p>
