@@ -83,6 +83,12 @@ async def get_plan(plan_id: str, request: Request):
     return _resp(plans.handler(_event(request, b"", {"planId": plan_id}), None))
 
 
+@app.patch("/plans/{plan_id}")
+async def patch_plan(plan_id: str, request: Request):
+    body = await request.body()
+    return _resp(plans.handler(_event(request, body, {"planId": plan_id}), None))
+
+
 @app.post("/plans/{plan_id}/export")
 async def export_plan(plan_id: str, request: Request):
     body = await request.body()

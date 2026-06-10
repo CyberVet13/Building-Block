@@ -306,7 +306,7 @@ export class BuildBlockStack extends cdk.Stack {
 
     httpApi.addRoutes({
       path: "/plans/{planId}",
-      methods: [apigatewayv2.HttpMethod.GET],
+      methods: [apigatewayv2.HttpMethod.GET, apigatewayv2.HttpMethod.PATCH],
       integration: new HttpLambdaIntegration("PlanDetailIntegration", plansHandler),
     });
 

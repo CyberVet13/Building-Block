@@ -6,10 +6,30 @@ import json
 from typing import Any
 
 from build_block.auth.admin import require_admin
+from build_block.config import settings
 from build_block.db.pool import get_conn
 
 
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
+    if settings.demo_mode:
+        return _ok({
+            "subscriptions_by_tier": {"free": 12, "starter": 5, "pro": 3, "business": 1},
+            "plans_30d": 47,
+            "previews_30d": 124,
+            "estimated_cost_usd_30d": 38.42,
+            "failed_jobs_7d": 0,
+            "new_users_30d": 21,
+            "plans_per_day_14d": [
+                {"day": "2026-05-28", "count": 2}, {"day": "2026-05-29", "count": 3},
+                {"day": "2026-05-30", "count": 1}, {"day": "2026-05-31", "count": 4},
+                {"day": "2026-06-01", "count": 5}, {"day": "2026-06-02", "count": 3},
+                {"day": "2026-06-03", "count": 2}, {"day": "2026-06-04", "count": 6},
+                {"day": "2026-06-05", "count": 4}, {"day": "2026-06-06", "count": 3},
+                {"day": "2026-06-07", "count": 5}, {"day": "2026-06-08", "count": 4},
+                {"day": "2026-06-09", "count": 3}, {"day": "2026-06-10", "count": 2},
+            ],
+        })
+
     try:
         require_admin(event)
 

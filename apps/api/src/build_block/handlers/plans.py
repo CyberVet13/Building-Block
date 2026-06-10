@@ -19,8 +19,11 @@ from build_block.demo import DEMO_PLAN, DEMO_PLAN_ID
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     # Demo mode
     if settings.demo_mode:
+        method = (event.get("requestContext") or {}).get("http", {}).get("method", "GET")
         path_params = event.get("pathParameters") or {}
         if path_params.get("planId"):
+            if method == "PATCH":
+                return _ok({"message": "Saved (demo)", "plan_id": path_params["planId"]})
             return _ok(DEMO_PLAN)
         return _ok({
             "plans": [{
@@ -90,6 +93,37 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         return _err(401, str(exc))
     except Exception as exc:
         return _err(500, str(exc))
+
+
+def _patch_plan(user_id, plan_id: str, body_str: str) -> dict:
+    """PATCH /plans/{planId} — update section content."""
+    try:
+        body = json.loads(body_str or "{}")
+    except json.JSONDecodeError:
+        return _err(400, "Invalid JSON body")
+
+    new_sections = body.get("sections")
+    if not new_sections or not isinstance(new_sections, dict):
+        return _err(400, "sections dict is required")
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT content_json FROM plans WHERE id = %s AND user_id = %s",
+            (plan_id, str(user_id)),
+        ).fetchone()
+        if not row:
+            return _err(404, "Plan not found")
+
+        existing = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+        existing.setdefault("sections", {}).update(new_sections)
+
+        conn.execute(
+            "UPDATE plans SET content_json = %s::jsonb, updated_at = now() WHERE id = %s",
+            (json.dumps(existing), plan_id),
+        )
+        conn.commit()
+
+    return _ok({"message": "Saved", "plan_id": plan_id})
 
 
 def _get_plan_detail(user_id, plan_id: str) -> dict:
