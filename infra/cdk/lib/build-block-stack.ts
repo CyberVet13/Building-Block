@@ -131,24 +131,27 @@ export class BuildBlockStack extends cdk.Stack {
       resources: ["*"],
     });
 
-    const pythonCode = lambda.Code.fromAsset("../../apps/api/src", {
-      bundling: {
-        image: lambda.Runtime.PYTHON_3_12.bundlingImage,
-        command: [
-          "bash", "-c",
-          [
-            "pip install -r /asset-input/../requirements.txt -t /asset-output",
-            "cp -r /asset-input/. /asset-output",
-          ].join(" && "),
-        ],
-      },
+    // Lambda Layer: Python dependencies (built by scripts/build-lambda.ps1)
+    // Run `.\scripts\build-lambda.ps1` before `cdk deploy`.
+    const depsLayer = new lambda.LayerVersion(this, "DepsLayer", {
+      layerVersionName: `build-block-deps-${stage}`,
+      code: lambda.Code.fromAsset("../../dist/lambda-layer"),
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+      description: "Build-Block Python dependencies (reportlab, psycopg, boto3, stripe, etc.)",
     });
+
+    // Application source code only — fast to update, no dep rebuild needed
+    const pythonCode = lambda.Code.fromAsset("../../dist/lambda-src.zip");
+
+    // Shared layer list — attached to every Lambda
+    const layers = [depsLayer];
 
     // ── API Lambda ────────────────────────────────────────────────────────
     const apiHandler = new lambda.Function(this, "ApiHandler", {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.generate.handler",
       code: pythonCode,
+      layers,
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       environment: sharedEnv,
@@ -162,6 +165,7 @@ export class BuildBlockStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.pipeline_worker.handler",
       code: pythonCode,
+      layers,
       timeout: cdk.Duration.minutes(5),
       memorySize: 1024,
       environment: sharedEnv,
@@ -174,6 +178,7 @@ export class BuildBlockStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.finalize.handler",
       code: pythonCode,
+      layers,
       timeout: cdk.Duration.seconds(60),
       memorySize: 512,
       environment: sharedEnv,
@@ -212,6 +217,18 @@ export class BuildBlockStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.jobs.handler",
       code: pythonCode,
+      layers,
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      environment: sharedEnv,
+    });
+
+    // ── Plans list Lambda ─────────────────────────────────────────────────
+    const plansHandler = new lambda.Function(this, "PlansHandler", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "build_block.handlers.plans.handler",
+      code: pythonCode,
+      layers,
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
       environment: sharedEnv,
@@ -222,6 +239,7 @@ export class BuildBlockStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.checkout.handler",
       code: pythonCode,
+      layers,
       timeout: cdk.Duration.seconds(15),
       memorySize: 256,
       environment: sharedEnv,
@@ -231,6 +249,7 @@ export class BuildBlockStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.stripe_webhook.handler",
       code: pythonCode,
+      layers,
       timeout: cdk.Duration.seconds(15),
       memorySize: 256,
       environment: sharedEnv,
@@ -240,6 +259,7 @@ export class BuildBlockStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.portal.handler",
       code: pythonCode,
+      layers,
       timeout: cdk.Duration.seconds(15),
       memorySize: 256,
       environment: sharedEnv,
@@ -249,6 +269,7 @@ export class BuildBlockStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.account.handler",
       code: pythonCode,
+      layers,
       timeout: cdk.Duration.seconds(15),
       memorySize: 256,
       environment: sharedEnv,
@@ -274,6 +295,12 @@ export class BuildBlockStack extends cdk.Stack {
       path: "/jobs/{jobId}",
       methods: [apigatewayv2.HttpMethod.GET],
       integration: new HttpLambdaIntegration("JobsIntegration", jobsHandler),
+    });
+
+    httpApi.addRoutes({
+      path: "/plans",
+      methods: [apigatewayv2.HttpMethod.GET],
+      integration: new HttpLambdaIntegration("PlansIntegration", plansHandler),
     });
 
     httpApi.addRoutes({
@@ -306,6 +333,7 @@ export class BuildBlockStack extends cdk.Stack {
         runtime: lambda.Runtime.PYTHON_3_12,
         handler: handlerPath,
         code: pythonCode,
+        layers,
         timeout: cdk.Duration.seconds(30),
         memorySize: 512,
         environment: sharedEnv,
@@ -359,6 +387,7 @@ export class BuildBlockStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.export.handler",
       code: pythonCode,
+      layers,
       timeout: cdk.Duration.seconds(60),
       memorySize: 1024,   // ReportLab + python-docx need headroom
       environment: sharedEnv,
