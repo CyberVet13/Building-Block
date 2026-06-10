@@ -1,12 +1,15 @@
 import * as cdk from "aws-cdk-lib";
 import * as apigatewayv2 from "aws-cdk-lib/aws-apigatewayv2";
+import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as sfn from "aws-cdk-lib/aws-stepfunctions";
 import { Construct } from "constructs";
+import { buildPipelineAsl } from "./pipeline-asl";
 
 export interface BuildBlockStackProps extends cdk.StackProps {
   stage: string;
@@ -16,9 +19,9 @@ export class BuildBlockStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: BuildBlockStackProps) {
     super(scope, id, props);
 
-    const stage = props.stage;
+    const { stage } = props;
 
-    // --- S3: corpus (private) + generated plans ---
+    // ── S3 ────────────────────────────────────────────────────────────────
     const corpusBucket = new s3.Bucket(this, "CorpusBucket", {
       bucketName: `build-block-corpus-${stage}`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -31,28 +34,35 @@ export class BuildBlockStack extends cdk.Stack {
       bucketName: `build-block-plans-${stage}`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
-      lifecycleRules: [{ transitions: [{ storageClass: s3.StorageClass.INTELLIGENT_TIERING, transitionAfter: cdk.Duration.days(30) }] }],
+      lifecycleRules: [{
+        transitions: [{
+          storageClass: s3.StorageClass.INTELLIGENT_TIERING,
+          transitionAfter: cdk.Duration.days(30),
+        }],
+      }],
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    // --- Aurora Serverless v2 + pgvector (cost-minimized) ---
+    // ── VPC (no NAT — cost minimized) ─────────────────────────────────────
     const vpc = new ec2.Vpc(this, "Vpc", {
       maxAzs: 2,
-      natGateways: 0, // Avoid NAT gateway cost; use public subnet + security group for dev
+      natGateways: 0,
     });
 
     const dbSecurityGroup = new ec2.SecurityGroup(this, "DbSecurityGroup", {
       vpc,
-      description: "Aurora access for Build-Block",
+      description: "Aurora pgvector access",
       allowAllOutbound: true,
     });
+    // Allow Lambda security group to connect (added below after Lambda SG created)
 
+    // ── Aurora Serverless v2 + pgvector ───────────────────────────────────
     const cluster = new rds.DatabaseCluster(this, "AuroraCluster", {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
         version: rds.AuroraPostgresEngineVersion.VER_16_4,
       }),
       serverlessV2MinCapacity: 0.5,
-      serverlessV2MaxCapacity: 2,
+      serverlessV2MaxCapacity: 4,
       writer: rds.ClusterInstance.serverlessV2("writer"),
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
@@ -61,7 +71,7 @@ export class BuildBlockStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.SNAPSHOT,
     });
 
-    // --- Cognito ---
+    // ── Cognito ───────────────────────────────────────────────────────────
     const userPool = new cognito.UserPool(this, "UserPool", {
       userPoolName: `build-block-${stage}`,
       selfSignUpEnabled: true,
@@ -74,53 +84,121 @@ export class BuildBlockStack extends cdk.Stack {
       authFlows: { userPassword: true, userSrp: true },
     });
 
-    // --- Lambda placeholder (wire Python bundle in implementation phase) ---
+    // ── Shared Lambda config ──────────────────────────────────────────────
+    const sharedEnv: Record<string, string> = {
+      AWS_REGION_NAME: this.region,
+      CORPUS_BUCKET: corpusBucket.bucketName,
+      PLANS_BUCKET: plansBucket.bucketName,
+      COGNITO_USER_POOL_ID: userPool.userPoolId,
+      COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,
+      DATABASE_URL: `postgresql://buildblock_app:REPLACE_ME@${cluster.clusterEndpoint.hostname}:5432/buildblock`,
+    };
+
+    const bedrockPolicy = new iam.PolicyStatement({
+      actions: ["bedrock:InvokeModel", "bedrock:Converse"],
+      resources: ["*"],
+    });
+
+    const pythonCode = lambda.Code.fromAsset("../../apps/api/src", {
+      bundling: {
+        image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+        command: [
+          "bash", "-c",
+          [
+            "pip install -r /asset-input/../requirements.txt -t /asset-output",
+            "cp -r /asset-input/. /asset-output",
+          ].join(" && "),
+        ],
+      },
+    });
+
+    // ── API Lambda ────────────────────────────────────────────────────────
     const apiHandler = new lambda.Function(this, "ApiHandler", {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.generate.handler",
-      code: lambda.Code.fromAsset("../../apps/api/src", {
-        bundling: {
-          image: lambda.Runtime.PYTHON_3_12.bundlingImage,
-          command: ["bash", "-c", "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output"],
-        },
-      }),
+      code: pythonCode,
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
-      environment: {
-        CORPUS_BUCKET: corpusBucket.bucketName,
-        PLANS_BUCKET: plansBucket.bucketName,
-        COGNITO_USER_POOL_ID: userPool.userPoolId,
-        COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,
-      },
+      environment: sharedEnv,
     });
-
+    apiHandler.addToRolePolicy(bedrockPolicy);
     corpusBucket.grantRead(apiHandler);
     plansBucket.grantReadWrite(apiHandler);
 
-    // --- API Gateway HTTP API ---
+    // ── Pipeline worker Lambda ────────────────────────────────────────────
+    const workerHandler = new lambda.Function(this, "PipelineWorker", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "build_block.handlers.pipeline_worker.handler",
+      code: pythonCode,
+      timeout: cdk.Duration.minutes(5),
+      memorySize: 1024,
+      environment: sharedEnv,
+    });
+    workerHandler.addToRolePolicy(bedrockPolicy);
+    corpusBucket.grantRead(workerHandler);
+
+    // ── Finalize Lambda ───────────────────────────────────────────────────
+    const finalizeHandler = new lambda.Function(this, "FinalizeHandler", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "build_block.handlers.finalize.handler",
+      code: pythonCode,
+      timeout: cdk.Duration.seconds(60),
+      memorySize: 512,
+      environment: sharedEnv,
+    });
+    plansBucket.grantReadWrite(finalizeHandler);
+
+    // ── Step Functions (real ASL) ─────────────────────────────────────────
+    const asl = buildPipelineAsl(
+      workerHandler.functionArn,
+      finalizeHandler.functionArn,
+    );
+
+    const stateMachine = new sfn.StateMachine(this, "GenerationWorkflow", {
+      stateMachineName: `build-block-generation-${stage}`,
+      definitionBody: sfn.DefinitionBody.fromString(JSON.stringify(asl)),
+    });
+
+    stateMachine.grantStartExecution(apiHandler);
+    workerHandler.grantInvoke(stateMachine);
+    finalizeHandler.grantInvoke(stateMachine);
+
+    // Pass state machine ARN to API handler
+    apiHandler.addEnvironment("STATE_MACHINE_ARN", stateMachine.stateMachineArn);
+
+    // ── SSE / job-status Lambda ───────────────────────────────────────────
+    const jobsHandler = new lambda.Function(this, "JobsHandler", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "build_block.handlers.jobs.handler",
+      code: pythonCode,
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      environment: sharedEnv,
+    });
+
+    // ── API Gateway HTTP API ──────────────────────────────────────────────
     const httpApi = new apigatewayv2.HttpApi(this, "HttpApi", {
       apiName: `build-block-${stage}`,
       corsPreflight: {
-        allowOrigins: ["*"], // Tighten to Amplify/Vercel domain in prod
+        allowOrigins: ["*"],
         allowMethods: [apigatewayv2.CorsHttpMethod.ANY],
+        allowHeaders: ["Authorization", "Content-Type"],
       },
     });
 
-    // --- Step Functions placeholder ---
-    const stateMachine = new sfn.StateMachine(this, "GenerationWorkflow", {
-      stateMachineName: `build-block-generation-${stage}`,
-      definitionBody: sfn.DefinitionBody.fromString(
-        JSON.stringify({
-          Comment: "Build-Block generation pipeline — replace with ASL in implementation phase",
-          StartAt: "Placeholder",
-          States: {
-            Placeholder: { Type: "Pass", End: true },
-          },
-        }),
-      ),
+    httpApi.addRoutes({
+      path: "/generate",
+      methods: [apigatewayv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("GenerateIntegration", apiHandler),
     });
 
-    // --- Outputs ---
+    httpApi.addRoutes({
+      path: "/jobs/{jobId}",
+      methods: [apigatewayv2.HttpMethod.GET],
+      integration: new HttpLambdaIntegration("JobsIntegration", jobsHandler),
+    });
+
+    // ── Outputs ───────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, "CorpusBucketName", { value: corpusBucket.bucketName });
     new cdk.CfnOutput(this, "PlansBucketName", { value: plansBucket.bucketName });
     new cdk.CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
