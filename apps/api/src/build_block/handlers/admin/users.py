@@ -93,14 +93,16 @@ def _mutate_user(user_id: str, action: str, body_str: str) -> dict:
 
     with get_conn() as conn:
         if action == "grant":
-            # Comp a tier upgrade without Stripe
             tier = body.get("tier", "starter")
             conn.execute(
                 """
                 INSERT INTO subscriptions (user_id, stripe_customer_id, tier, status, plans_per_period)
                 VALUES (%s, 'manual', %s, 'active', %s)
-                ON CONFLICT (stripe_subscription_id) DO UPDATE
-                  SET tier = EXCLUDED.tier, status = 'active'
+                ON CONFLICT (user_id) DO UPDATE
+                  SET tier = EXCLUDED.tier,
+                      status = 'active',
+                      plans_per_period = EXCLUDED.plans_per_period,
+                      updated_at = now()
                 """,
                 (user_id, tier, {"starter": 3, "pro": 10, "business": 30}.get(tier, 0)),
             )

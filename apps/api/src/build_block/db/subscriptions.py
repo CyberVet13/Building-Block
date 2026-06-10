@@ -17,7 +17,11 @@ def upsert_subscription(
     current_period_start: datetime | None,
     current_period_end: datetime | None,
 ) -> None:
-    """Insert or update the subscription row for a user (called from webhook)."""
+    """Insert or update the subscription row for a user (called from webhook).
+
+    Uses ON CONFLICT (user_id) so one row per user is maintained.
+    The stripe_subscription_id is updated in place on renewal/upgrade.
+    """
     with get_conn() as conn:
         conn.execute(
             """
@@ -26,7 +30,9 @@ def upsert_subscription(
                tier, status, plans_per_period,
                current_period_start, current_period_end, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
-            ON CONFLICT (stripe_subscription_id) DO UPDATE SET
+            ON CONFLICT (user_id) DO UPDATE SET
+              stripe_customer_id    = EXCLUDED.stripe_customer_id,
+              stripe_subscription_id = EXCLUDED.stripe_subscription_id,
               tier                  = EXCLUDED.tier,
               status                = EXCLUDED.status,
               plans_per_period      = EXCLUDED.plans_per_period,

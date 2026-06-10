@@ -33,8 +33,12 @@ CREATE TABLE subscriptions (
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_subscriptions_user ON subscriptions(user_id);
+CREATE UNIQUE INDEX idx_subscriptions_user ON subscriptions(user_id);
 CREATE INDEX idx_subscriptions_stripe_customer ON subscriptions(stripe_customer_id);
+-- Partial unique index: one active sub per stripe_subscription_id (NULL allowed for manual grants)
+CREATE UNIQUE INDEX idx_subscriptions_stripe_sub_id
+    ON subscriptions(stripe_subscription_id)
+    WHERE stripe_subscription_id IS NOT NULL;
 
 -- Tier limits (reference; enforced in app from tier column)
 -- free: 0 full plans (preview only)

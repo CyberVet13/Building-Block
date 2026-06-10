@@ -12,6 +12,7 @@ import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 import { buildPipelineAsl } from "./pipeline-asl";
+import { BuildBlockAlarms } from "./alarms";
 
 export interface BuildBlockStackProps extends cdk.StackProps {
   stage: string;
@@ -474,6 +475,22 @@ export class BuildBlockStack extends cdk.Stack {
         webAclArn: webAcl.attrArn,
       });
     }
+
+    // ── CloudWatch alarms ─────────────────────────────────────────────────
+    new BuildBlockAlarms(this, "Alarms", {
+      stage,
+      alarmEmail: process.env.ALARM_EMAIL,
+      lambdaFunctions: [
+        apiHandler, workerHandler, finalizeHandler,
+        jobsHandler, plansHandler,
+        checkoutHandler, webhookHandler, portalHandler, accountHandler,
+        exportHandler,
+        adminStats, adminJobs, adminUsers, adminPrompts, adminCorpus,
+      ],
+      workerFunction: workerHandler,
+      apiFunction: apiHandler,
+      wafMetricName: `build-block-${stage}`,
+    });
 
     // ── Outputs ───────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, "CorpusBucketName", { value: corpusBucket.bucketName });

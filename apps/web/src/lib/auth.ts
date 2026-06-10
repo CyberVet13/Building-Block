@@ -4,29 +4,25 @@
  * Auth helpers — wraps Amplify Cognito in production,
  * falls back to a dev stub when COGNITO env vars are absent.
  *
- * Usage:
- *   const token = await getToken();          // access token for API calls
- *   const user  = await getCurrentUser();    // { sub, email } | null
- *   await signIn(email, password);
- *   await signOut();
+ * Design: getToken() is synchronous everywhere for easy use in event handlers
+ * and useEffect callbacks. The token is cached in sessionStorage after sign-in
+ * and refreshed when it expires.
  */
 
 import { Amplify } from "aws-amplify";
 import {
   signIn as amplifySignIn,
   signOut as amplifySignOut,
-  getCurrentUser as amplifyGetCurrentUser,
   fetchAuthSession,
-  type AuthUser,
 } from "aws-amplify/auth";
 
-// ── Amplify configuration ─────────────────────────────────────────────────────
+// ── Config ────────────────────────────────────────────────────────────────────
 
-const USER_POOL_ID  = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
-const CLIENT_ID     = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID    ?? "";
-const IS_DEV_MODE   = !USER_POOL_ID || !CLIENT_ID;
+const USER_POOL_ID = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
+const CLIENT_ID    = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID    ?? "";
+export const IS_DEV_MODE = !USER_POOL_ID || !CLIENT_ID;
 
-if (!IS_DEV_MODE) {
+if (!IS_DEV_MODE && typeof window !== "undefined") {
   Amplify.configure({
     Auth: {
       Cognito: {
@@ -38,7 +34,7 @@ if (!IS_DEV_MODE) {
   });
 }
 
-// ── Dev stub (local without Cognito) ─────────────────────────────────────────
+// ── Dev stub ──────────────────────────────────────────────────────────────────
 
 const DEV_PAYLOAD = {
   sub: "dev-user-00000000",
@@ -49,14 +45,58 @@ const DEV_PAYLOAD = {
 const _b64 = (o: object) => btoa(JSON.stringify(o)).replace(/=+$/, "");
 const DEV_TOKEN = `eyJhbGciOiJub25lIn0.${_b64(DEV_PAYLOAD)}.dev`;
 
+const TOKEN_KEY = "bb_access_token";
+const TOKEN_EXP_KEY = "bb_token_exp";
+
+function _cacheToken(token: string, expEpoch: number) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(TOKEN_KEY, token);
+  window.sessionStorage.setItem(TOKEN_EXP_KEY, String(expEpoch));
+}
+
+function _clearToken() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(TOKEN_KEY);
+  window.sessionStorage.removeItem(TOKEN_EXP_KEY);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function getToken(): Promise<string | null> {
+/**
+ * Synchronous token getter — safe to call anywhere.
+ * Returns dev token in dev mode; cached Cognito token in production.
+ * Returns null if user is not signed in.
+ */
+export function getToken(): string | null {
   if (IS_DEV_MODE) return DEV_TOKEN;
+  if (typeof window === "undefined") return null;
+
+  const token = window.sessionStorage.getItem(TOKEN_KEY);
+  const exp   = Number(window.sessionStorage.getItem(TOKEN_EXP_KEY) ?? "0");
+
+  // Return cached token if not expired (with 60s buffer)
+  if (token && exp > Date.now() / 1000 + 60) return token;
+
+  // Token missing or expired — trigger background refresh (fire and forget)
+  _refreshToken();
+  return token ?? null;
+}
+
+/** Async version — awaits a fresh token; use in sign-in flows. */
+export async function getTokenAsync(): Promise<string | null> {
+  if (IS_DEV_MODE) return DEV_TOKEN;
+  return _refreshToken();
+}
+
+async function _refreshToken(): Promise<string | null> {
   try {
-    const session = await fetchAuthSession();
-    return session.tokens?.accessToken?.toString() ?? null;
+    const session = await fetchAuthSession({ forceRefresh: false });
+    const token = session.tokens?.accessToken?.toString() ?? null;
+    const exp   = session.tokens?.accessToken?.payload?.exp as number ?? 0;
+    if (token) _cacheToken(token, exp);
+    return token;
   } catch {
+    _clearToken();
     return null;
   }
 }
@@ -69,12 +109,12 @@ export interface AppUser {
 export async function getCurrentUser(): Promise<AppUser | null> {
   if (IS_DEV_MODE) return { sub: DEV_PAYLOAD.sub, email: DEV_PAYLOAD.email };
   try {
-    const user: AuthUser = await amplifyGetCurrentUser();
     const session = await fetchAuthSession();
     const payload = session.tokens?.idToken?.payload;
+    if (!payload?.sub) return null;
     return {
-      sub: user.userId,
-      email: (payload?.email as string) ?? user.signInDetails?.loginId ?? "",
+      sub: payload.sub as string,
+      email: (payload.email as string) ?? "",
     };
   } catch {
     return null;
@@ -82,24 +122,14 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
-  if (IS_DEV_MODE) {
-    console.warn("[auth] Dev mode: signIn is a no-op");
-    return;
-  }
+  if (IS_DEV_MODE) return;
   await amplifySignIn({ username: email, password });
+  // Cache token immediately after sign-in
+  await _refreshToken();
 }
 
 export async function signOut(): Promise<void> {
   if (IS_DEV_MODE) return;
+  _clearToken();
   await amplifySignOut();
-}
-
-/**
- * Synchronous version for non-async contexts (e.g. initial fetch calls).
- * Returns the dev token in dev mode; otherwise returns null (caller should
- * use the async getToken() and wait).
- */
-export function getTokenSync(): string | null {
-  if (IS_DEV_MODE) return DEV_TOKEN;
-  return null;
 }

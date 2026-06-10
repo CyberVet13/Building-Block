@@ -10,9 +10,10 @@
 #   $env:WEB_URL = "https://your-domain.com"
 
 param(
-    [string]$Stage    = "dev",
-    [string]$Region   = "us-east-1",
-    [string]$Account  = "058170691476",
+    [string]$Stage      = "dev",
+    [string]$Region     = "us-east-1",
+    [string]$Account    = "058170691476",
+    [string]$AlarmEmail = "",
     [switch]$SkipBuild,
     [switch]$SkipTests,
     [switch]$DryRun
@@ -63,7 +64,8 @@ npx cdk bootstrap "aws://$Account/$Region"
 $StackName = "BuildBlock$(([System.String]::Concat($Stage.Substring(0,1).ToUpper(), $Stage.Substring(1))))"
 Step "Deploying stack: $StackName..."
 
-$env:WEB_URL = if ($env:WEB_URL) { $env:WEB_URL } else { "https://your-domain.com" }
+$env:WEB_URL     = if ($env:WEB_URL)     { $env:WEB_URL }     else { "https://your-domain.com" }
+$env:ALARM_EMAIL = if ($AlarmEmail)     { $AlarmEmail }      elseif ($env:ALARM_EMAIL) { $env:ALARM_EMAIL } else { "" }
 
 npx cdk deploy $StackName `
     --require-approval never `
