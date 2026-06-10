@@ -263,6 +263,60 @@ export class BuildBlockStack extends cdk.Stack {
       integration: new HttpLambdaIntegration("AccountIntegration", accountHandler),
     });
 
+    // ── Admin Lambdas ─────────────────────────────────────────────────────
+    const mkAdmin = (id: string, handlerPath: string) =>
+      new lambda.Function(this, id, {
+        runtime: lambda.Runtime.PYTHON_3_12,
+        handler: handlerPath,
+        code: pythonCode,
+        timeout: cdk.Duration.seconds(30),
+        memorySize: 512,
+        environment: sharedEnv,
+      });
+
+    const adminStats   = mkAdmin("AdminStats",   "build_block.handlers.admin.stats.handler");
+    const adminJobs    = mkAdmin("AdminJobs",    "build_block.handlers.admin.jobs.handler");
+    const adminUsers   = mkAdmin("AdminUsers",   "build_block.handlers.admin.users.handler");
+    const adminPrompts = mkAdmin("AdminPrompts", "build_block.handlers.admin.prompts.handler");
+    const adminCorpus  = mkAdmin("AdminCorpus",  "build_block.handlers.admin.corpus.handler");
+    corpusBucket.grantRead(adminCorpus);
+
+    httpApi.addRoutes({
+      path: "/admin/stats",
+      methods: [apigatewayv2.HttpMethod.GET],
+      integration: new HttpLambdaIntegration("AdminStatsInt", adminStats),
+    });
+    httpApi.addRoutes({
+      path: "/admin/jobs",
+      methods: [apigatewayv2.HttpMethod.GET],
+      integration: new HttpLambdaIntegration("AdminJobsInt", adminJobs),
+    });
+    httpApi.addRoutes({
+      path: "/admin/users",
+      methods: [apigatewayv2.HttpMethod.GET, apigatewayv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("AdminUsersInt", adminUsers),
+    });
+    httpApi.addRoutes({
+      path: "/admin/users/{userId}/{action}",
+      methods: [apigatewayv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("AdminUserActionInt", adminUsers),
+    });
+    httpApi.addRoutes({
+      path: "/admin/prompts",
+      methods: [apigatewayv2.HttpMethod.GET, apigatewayv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("AdminPromptsInt", adminPrompts),
+    });
+    httpApi.addRoutes({
+      path: "/admin/corpus",
+      methods: [apigatewayv2.HttpMethod.GET],
+      integration: new HttpLambdaIntegration("AdminCorpusInt", adminCorpus),
+    });
+    httpApi.addRoutes({
+      path: "/admin/corpus/{docId}/{action}",
+      methods: [apigatewayv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("AdminCorpusActionInt", adminCorpus),
+    });
+
     // ── Outputs ───────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, "CorpusBucketName", { value: corpusBucket.bucketName });
     new cdk.CfnOutput(this, "PlansBucketName", { value: plansBucket.bucketName });
