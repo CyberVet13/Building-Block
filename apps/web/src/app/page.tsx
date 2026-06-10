@@ -16,15 +16,10 @@ export default function HomePage() {
         <nav className="mb-20 flex items-center justify-between">
           <span className="text-xl font-semibold tracking-tight">Build-Block</span>
           <div className="flex gap-4 text-sm text-gray-400">
-            <Link href="/create" className="hover:text-white transition-colors">
-              Create
-            </Link>
-            <Link href="/pricing" className="hover:text-white transition-colors">
-              Pricing
-            </Link>
-            <Link href="/admin" className="hover:text-white transition-colors">
-              Admin
-            </Link>
+            <Link href="/create" className="hover:text-white transition-colors">Create</Link>
+            <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
+            <Link href="/account" className="hover:text-white transition-colors">Account</Link>
+            <Link href="/admin" className="hover:text-white transition-colors">Admin</Link>
           </div>
         </nav>
 

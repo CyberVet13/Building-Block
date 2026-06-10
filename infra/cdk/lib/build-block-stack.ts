@@ -92,6 +92,10 @@ export class BuildBlockStack extends cdk.Stack {
       COGNITO_USER_POOL_ID: userPool.userPoolId,
       COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,
       DATABASE_URL: `postgresql://buildblock_app:REPLACE_ME@${cluster.clusterEndpoint.hostname}:5432/buildblock`,
+      // Stripe keys injected at deploy time via environment or Secrets Manager
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? "",
+      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+      WEB_URL: process.env.WEB_URL ?? "https://your-domain.com",
     };
 
     const bedrockPolicy = new iam.PolicyStatement({
@@ -166,12 +170,49 @@ export class BuildBlockStack extends cdk.Stack {
     // Pass state machine ARN to API handler
     apiHandler.addEnvironment("STATE_MACHINE_ARN", stateMachine.stateMachineArn);
 
-    // ── SSE / job-status Lambda ───────────────────────────────────────────
+    // ── Job-status Lambda ─────────────────────────────────────────────────
     const jobsHandler = new lambda.Function(this, "JobsHandler", {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "build_block.handlers.jobs.handler",
       code: pythonCode,
       timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      environment: sharedEnv,
+    });
+
+    // ── Stripe Lambdas ────────────────────────────────────────────────────
+    const checkoutHandler = new lambda.Function(this, "CheckoutHandler", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "build_block.handlers.checkout.handler",
+      code: pythonCode,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 256,
+      environment: sharedEnv,
+    });
+
+    const webhookHandler = new lambda.Function(this, "WebhookHandler", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "build_block.handlers.stripe_webhook.handler",
+      code: pythonCode,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 256,
+      environment: sharedEnv,
+    });
+
+    const portalHandler = new lambda.Function(this, "PortalHandler", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "build_block.handlers.portal.handler",
+      code: pythonCode,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 256,
+      environment: sharedEnv,
+    });
+
+    const accountHandler = new lambda.Function(this, "AccountHandler", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "build_block.handlers.account.handler",
+      code: pythonCode,
+      timeout: cdk.Duration.seconds(15),
       memorySize: 256,
       environment: sharedEnv,
     });
@@ -196,6 +237,30 @@ export class BuildBlockStack extends cdk.Stack {
       path: "/jobs/{jobId}",
       methods: [apigatewayv2.HttpMethod.GET],
       integration: new HttpLambdaIntegration("JobsIntegration", jobsHandler),
+    });
+
+    httpApi.addRoutes({
+      path: "/checkout",
+      methods: [apigatewayv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("CheckoutIntegration", checkoutHandler),
+    });
+
+    httpApi.addRoutes({
+      path: "/webhooks/stripe",
+      methods: [apigatewayv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("WebhookIntegration", webhookHandler),
+    });
+
+    httpApi.addRoutes({
+      path: "/portal",
+      methods: [apigatewayv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("PortalIntegration", portalHandler),
+    });
+
+    httpApi.addRoutes({
+      path: "/account",
+      methods: [apigatewayv2.HttpMethod.GET],
+      integration: new HttpLambdaIntegration("AccountIntegration", accountHandler),
     });
 
     // ── Outputs ───────────────────────────────────────────────────────────
