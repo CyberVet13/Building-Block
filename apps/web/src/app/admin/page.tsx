@@ -68,25 +68,29 @@ export default function AdminOverview() {
             </div>
           </div>
 
-          {/* Sparkline table */}
+          {/* Sparkline */}
           <div className="glass mt-6 rounded-xl p-6">
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">Plans / day (14d)</h2>
-            <div className="flex items-end gap-1 h-16">
-              {stats.plans_per_day_14d.map((d) => {
+            <div className="relative flex items-end gap-1" style={{ height: 64 }}>
+              {(() => {
                 const max = Math.max(...stats.plans_per_day_14d.map((x) => x.count), 1);
-                const pct = Math.round((d.count / max) * 100);
-                return (
-                  <div key={d.day} className="group relative flex-1">
-                    <div
-                      className="w-full rounded-t bg-accent/60 hover:bg-accent transition-colors"
-                      style={{ height: `${Math.max(pct, 4)}%` }}
-                    />
-                    <span className="absolute -top-5 left-1/2 -translate-x-1/2 hidden text-xs text-gray-400 group-hover:block whitespace-nowrap">
-                      {d.day.slice(5)}: {d.count}
-                    </span>
-                  </div>
-                );
-              })}
+                return stats.plans_per_day_14d.map((d) => {
+                  const barH = Math.max(Math.round((d.count / max) * 56), 3);
+                  return (
+                    <div key={d.day} className="group relative flex-1 flex flex-col justify-end" style={{ height: 64 }}>
+                      <div
+                        className="w-full rounded-t bg-accent/60 hover:bg-accent transition-colors cursor-default"
+                        style={{ height: barH }}
+                        title={`${d.day.slice(5)}: ${d.count}`}
+                      />
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+            <div className="mt-2 flex justify-between text-xs text-gray-600">
+              <span>{stats.plans_per_day_14d[0]?.day.slice(5)}</span>
+              <span>{stats.plans_per_day_14d[stats.plans_per_day_14d.length - 1]?.day.slice(5)}</span>
             </div>
           </div>
         </>

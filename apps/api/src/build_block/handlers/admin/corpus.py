@@ -6,10 +6,33 @@ import json
 from typing import Any
 
 from build_block.auth.admin import require_admin
+from build_block.config import settings
 from build_block.db.pool import get_conn
 
 
+_DEMO_DOCS = [
+    {"doc_id": f"d-{s}-{ind}", "s3_key": f"templates/{s}/{ind}-v1.md", "doc_type": "template",
+     "section": s, "industry": ind, "tier_gate": tg, "version": "v1",
+     "is_active": True, "chunk_count": chunks, "ingested_at": "2026-06-10T00:00:00Z", "created_at": "2026-06-10T00:00:00Z"}
+    for s, ind, tg, chunks in [
+        ("executive_summary", "general", "free",    4),
+        ("market_analysis",   "general", "starter",  5),
+        ("financials",        "saas",    "starter",  6),
+        ("financials",        "general", "starter",  5),
+        ("competitive_landscape", "general", "starter", 4),
+        ("operations",        "general", "pro",      3),
+    ]
+]
+
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
+    if settings.demo_mode:
+        method = (event.get("requestContext") or {}).get("http", {}).get("method", "GET")
+        if method == "POST":
+            return _ok({"message": "Action applied (demo)"})
+        return _ok({"documents": _DEMO_DOCS, "total_documents": len(_DEMO_DOCS),
+                    "total_chunks": sum(d["chunk_count"] for d in _DEMO_DOCS),
+                    "active_documents": len(_DEMO_DOCS)})
+
     try:
         require_admin(event)
 

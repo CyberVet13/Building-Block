@@ -7,10 +7,27 @@ from typing import Any
 from uuid import UUID
 
 from build_block.auth.admin import require_admin
+from build_block.config import settings
 from build_block.db.pool import get_conn
 
 
+_DEMO_USERS = [
+    {"user_id": "u-001", "email": "alice@example.com",  "role": "customer", "created_at": "2026-06-01T00:00:00Z", "tier": "pro",     "sub_status": "active",  "period_end": "2026-07-01T00:00:00Z", "total_plans": 7},
+    {"user_id": "u-002", "email": "bob@example.com",    "role": "customer", "created_at": "2026-06-03T00:00:00Z", "tier": "starter", "sub_status": "active",  "period_end": "2026-07-03T00:00:00Z", "total_plans": 2},
+    {"user_id": "u-003", "email": "carol@example.com",  "role": "customer", "created_at": "2026-06-05T00:00:00Z", "tier": "free",    "sub_status": "none",    "period_end": None, "total_plans": 0},
+    {"user_id": "u-004", "email": "admin@build-block.com", "role": "admin", "created_at": "2026-06-01T00:00:00Z", "tier": "business","sub_status": "active",  "period_end": "2026-07-01T00:00:00Z", "total_plans": 3},
+]
+
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
+    if settings.demo_mode:
+        method = (event.get("requestContext") or {}).get("http", {}).get("method", "GET")
+        if method == "POST":
+            path = event.get("rawPath", "")
+            parts = path.strip("/").split("/")
+            action = parts[-1] if parts else "unknown"
+            return _ok({"message": f"Action '{action}' applied (demo)"})
+        return _ok({"users": _DEMO_USERS, "count": len(_DEMO_USERS)})
+
     try:
         require_admin(event)
 

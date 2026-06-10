@@ -6,10 +6,32 @@ import json
 from typing import Any
 
 from build_block.auth.admin import require_admin
+from build_block.config import settings
 from build_block.db.pool import get_conn
 
 
+_DEMO_STAGES = [
+    {"stage_id": s, "display_name": n, "sort_order": i, "default_model": m,
+     "active_prompt": {"prompt_id": f"p-{s}", "version": 1, "template_text": f"Write the {n} section.\n\nBusiness idea: {{{{business_idea}}}}\nIndustry: {{{{industry}}}}\n\n{{{{retrieved_context}}}}", "is_active": True},
+     "retrieval": {"top_k": 5, "filters": {}}, "versions": [{"version": 1, "is_active": True, "created_at": "2026-06-10T00:00:00Z"}]}
+    for i, (s, n, m) in enumerate([
+        ("outline", "Outline", "claude-3-5-sonnet"),
+        ("market_analysis", "Market Analysis", "claude-3-5-sonnet"),
+        ("financials", "Financial Projections", "claude-3-5-sonnet"),
+        ("competitive_landscape", "Competitive Landscape", "claude-3-5-sonnet"),
+        ("executive_summary", "Executive Summary", "claude-3-5-sonnet"),
+        ("consistency", "Consistency Pass", "claude-3-haiku"),
+    ])
+]
+
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
+    if settings.demo_mode:
+        method = (event.get("requestContext") or {}).get("http", {}).get("method", "GET")
+        if method == "POST":
+            body = json.loads(event.get("body") or "{}")
+            return _ok({"message": f"Saved prompt v2 for {body.get('stage_id', '?')} (demo)", "version": 2})
+        return _ok({"stages": _DEMO_STAGES})
+
     try:
         require_admin(event)
 

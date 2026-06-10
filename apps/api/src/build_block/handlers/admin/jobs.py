@@ -6,10 +6,20 @@ import json
 from typing import Any
 
 from build_block.auth.admin import require_admin
+from build_block.config import settings
 from build_block.db.pool import get_conn
 
 
+_DEMO_JOBS = [
+    {"job_id": "j-001", "email": "alice@example.com", "status": "completed", "stage": "executive_summary", "is_preview": False, "error_message": None, "created_at": "2026-06-10T09:12:00Z", "completed_at": "2026-06-10T09:14:32Z", "industry": "saas"},
+    {"job_id": "j-002", "email": "bob@example.com",   "status": "completed", "stage": "executive_summary", "is_preview": True,  "error_message": None, "created_at": "2026-06-10T08:55:00Z", "completed_at": "2026-06-10T08:55:18Z", "industry": "retail"},
+    {"job_id": "j-003", "email": "carol@example.com", "status": "completed", "stage": "financials",        "is_preview": False, "error_message": None, "created_at": "2026-06-10T08:30:00Z", "completed_at": "2026-06-10T08:33:05Z", "industry": "healthcare"},
+]
+
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
+    if settings.demo_mode:
+        return _ok({"jobs": _DEMO_JOBS, "count": len(_DEMO_JOBS)})
+
     try:
         require_admin(event)
 
