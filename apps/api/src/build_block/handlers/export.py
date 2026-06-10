@@ -21,10 +21,14 @@ from uuid import UUID
 import boto3
 from botocore.exceptions import ClientError
 
+import base64
+
 from build_block.auth.cognito import extract_bearer, verify_token
 from build_block.billing.stripe_client import TIER_PLAN_LIMITS
+from build_block.config import settings
 from build_block.db import get_or_create_user, get_subscription
 from build_block.db.pool import get_conn
+from build_block.demo import DEMO_PLAN
 from build_block.export.pdf import render_pdf
 from build_block.export.docx import render_docx
 
@@ -35,6 +39,25 @@ URL_EXPIRY_SECONDS = 900   # 15 minutes
 
 
 def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
+    # Demo mode: generate real PDF/DOCX locally and return as data URL
+    if settings.demo_mode:
+        body = json.loads(event.get("body") or "{}")
+        fmt = body.get("format", "pdf").lower()
+        sections = DEMO_PLAN["content"]["sections"]
+        title = DEMO_PLAN["title"]
+        if fmt == "docx":
+            file_bytes = render_docx(title=title, sections=sections, generated_for="demo@build-block.com")
+            content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else:
+            file_bytes = render_pdf(title=title, sections=sections, generated_for="demo@build-block.com")
+            content_type = "application/pdf"
+        # Return as data URL so frontend can trigger download without S3
+        b64 = base64.b64encode(file_bytes).decode()
+        data_url = f"data:{content_type};base64,{b64}"
+        filename = f"{title[:40].replace(' ', '_')}.{fmt}"
+        return _ok({"download_url": data_url, "format": fmt,
+                    "expires_in_seconds": 9999, "filename": filename})
+
     try:
         headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
         token = extract_bearer(headers.get("authorization"))
