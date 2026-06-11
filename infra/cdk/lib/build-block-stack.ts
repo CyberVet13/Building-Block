@@ -57,7 +57,13 @@ export class BuildBlockStack extends cdk.Stack {
       description: "Aurora pgvector access",
       allowAllOutbound: true,
     });
-    // Allow Lambda security group to connect (added below after Lambda SG created)
+    // Allow inbound Postgres from anywhere — Lambda runs outside VPC (no NAT).
+    // Restrict to your IP in production: dbSecurityGroup.addIngressRule(ec2.Peer.ipv4("x.x.x.x/32"), ...)
+    dbSecurityGroup.addIngressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(5432),
+      "Postgres access for Lambda (no NAT VPC)"
+    );
 
     // ── Aurora Serverless v2 + pgvector ───────────────────────────────────
     const cluster = new rds.DatabaseCluster(this, "AuroraCluster", {
@@ -66,7 +72,9 @@ export class BuildBlockStack extends cdk.Stack {
       }),
       serverlessV2MinCapacity: 0.5,
       serverlessV2MaxCapacity: 4,
-      writer: rds.ClusterInstance.serverlessV2("writer"),
+      writer: rds.ClusterInstance.serverlessV2("writer", {
+        publiclyAccessible: true,   // Required: Lambda is outside VPC (no NAT)
+      }),
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       securityGroups: [dbSecurityGroup],

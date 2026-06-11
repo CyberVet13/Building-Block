@@ -1,0 +1,14 @@
+{
+  "BuildBlockDev": {
+    "WafAclArn": "arn:aws:wafv2:us-east-1:058170691476:regional/webacl/build-block-dev/042676dd-71ca-4ff4-9dbd-bf139fc59b33",
+    "PlansBucketName": "build-block-plans-dev",
+    "UserPoolClientId": "4heq6a606pochkqddfce8f9764",
+    "UserPoolId": "us-east-1_9MdUOjaLR",
+    "CorpusBucketName": "build-block-corpus-dev",
+    "DbClusterEndpoint": "buildblockdev-auroracluster23d869c0-fmjhcitqaz3m.cluster-cyh8ka4usvxb.us-east-1.rds.amazonaws.com",
+    "StateMachineArn": "arn:aws:states:us-east-1:058170691476:stateMachine:build-block-generation-dev",
+    "AlarmTopicArn": "arn:aws:sns:us-east-1:058170691476:build-block-alarms-dev",
+    "DashboardUrl": "https://us-east-1.console.aws.amazon.com/cloudwatch/home#dashboards:name=build-block-dev",
+    "HttpApiUrl": "https://t58boqtqnd.execute-api.us-east-1.amazonaws.com"
+  }
+}
