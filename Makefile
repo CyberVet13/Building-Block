@@ -78,6 +78,15 @@ ingest-dry:
 test:
 	cd apps/api && .venv/Scripts/python -m pytest tests/ -v
 
+test-e2e:
+	cd apps/web && npm run test:e2e
+
+test-e2e-ui:
+	cd apps/web && npm run test:e2e:ui
+
+playwright-install:
+	cd apps/web && npx playwright install chromium
+
 # ── Deploy ────────────────────────────────────────────────────────────────────
 
 build-lambda:
