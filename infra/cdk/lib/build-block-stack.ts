@@ -473,13 +473,20 @@ export class BuildBlockStack extends cdk.Stack {
       ],
     });
 
-    // Associate WAF with the HTTP API stage
-    const defaultStage = httpApi.defaultStage?.node.defaultChild as cdk.CfnResource | undefined;
-    if (defaultStage) {
-      new wafv2.CfnWebACLAssociation(this, "WafAssociation", {
-        resourceArn: `arn:aws:apigateway:${this.region}::/apis/${httpApi.apiId}/stages/$default`,
-        webAclArn: webAcl.attrArn,
-      });
+    // Note: WAF REGIONAL cannot be associated with HTTP API v2 stages directly.
+    // Rate limiting is enforced via the IpRateLimit WAF rule if fronted by CloudFront,
+    // or via API Gateway stage-level throttling below.
+    // For production, put CloudFront in front and associate the WebACL with the distribution.
+    new cdk.CfnOutput(this, "WafAclArn", {
+      value: webAcl.attrArn,
+      description: "Associate this with CloudFront or an ALB in production",
+    });
+
+    // API Gateway stage throttling (built-in rate limiting for HTTP API)
+    const cfnStage = httpApi.defaultStage?.node.defaultChild as cdk.CfnResource;
+    if (cfnStage) {
+      cfnStage.addPropertyOverride("DefaultRouteSettings.ThrottlingBurstLimit", 100);
+      cfnStage.addPropertyOverride("DefaultRouteSettings.ThrottlingRateLimit", 50);
     }
 
     // ── CloudWatch alarms ─────────────────────────────────────────────────
